@@ -22,10 +22,10 @@ public:
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 5.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override;
+    int getCurrentProgram() override { return currentPreset; }
+    void setCurrentProgram (int) override;
+    const juce::String getProgramName (int) override;
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock& destData) override;
@@ -50,6 +50,7 @@ private:
         int chorusW = 0, delayW = 0, tapeW = 0, preW = 0;
     };
 
+    int currentPreset = 0;
     ChannelState state[2];
 
     float trmPhase = 0.0f, lfoPhase = 0.0f;

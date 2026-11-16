@@ -3,13 +3,18 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <vector>
 
-// draws one fallen autumn leaf (used by the background and the falling-leaves overlay)
-void drawAutumnLeaf (juce::Graphics& g, juce::Point<float> centre, float size, float rotation, juce::Colour colour);
+constexpr int kDesignW = 1100;
+constexpr int kDesignH = 800;
 
-// shared knob setup (colours + behaviour)
-void styleKnob (juce::Slider& s, juce::Colour cap, juce::Colour tick, juce::Colour pointer, juce::Component* popupParent);
+struct KnobDef
+{
+    juce::String id, label;
+};
+
+void styleKnob (juce::Slider& s, juce::Colour cap, juce::Colour tick, juce::Colour pointer);
 
 //==============================================================================
+// Knobs are rendered once into cached images; only the pointer is drawn live.
 class EmoLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
@@ -17,10 +22,19 @@ public:
     void drawRotarySlider (juce::Graphics&, int x, int y, int width, int height,
                            float sliderPosProportional, float rotaryStartAngle,
                            float rotaryEndAngle, juce::Slider&) override;
+
+private:
+    struct Cached
+    {
+        int size;
+        juce::Colour cap, tick;
+        juce::Image img;
+    };
+    std::vector<Cached> cache;
+    juce::Image knobImage (int size, juce::Colour cap, juce::Colour tick, float a0, float a1);
 };
 
 //==============================================================================
-// chrome stomp switch with an LED above it
 class FootSwitch : public juce::Button
 {
 public:
@@ -29,21 +43,12 @@ public:
 };
 
 //==============================================================================
-struct KnobDef
-{
-    juce::String id, label;
-};
-
 class Pedal : public juce::Component
 {
 public:
     Pedal (juce::AudioProcessorValueTreeState& apvts,
-           const juce::String& title,
-           const juce::String& subtitle,
-           const juce::String& onId,
-           const std::vector<KnobDef>& knobDefs,
-           juce::Colour bodyColour,
-           juce::Colour capColour);
+           const juce::String& title, const juce::String& subtitle, const juce::String& onId,
+           const std::vector<KnobDef>& knobDefs, juce::Colour bodyColour, juce::Colour capColour);
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -80,35 +85,36 @@ public:
 
 private:
     void timerCallback() override;
+    int litSegments() const;
+
     EmoBoardProcessor& proc;
     float level = 0.0f;
+    int lastLit = -1;
 };
 
 //==============================================================================
-class FallingLeaves : public juce::Component, private juce::Timer
+// Everything lives in this fixed-size (design) component; the editor scales it.
+class Board : public juce::Component
 {
 public:
-    FallingLeaves();
-    ~FallingLeaves() override { stopTimer(); }
-    void resized() override;
+    explicit Board (EmoBoardProcessor&);
     void paint (juce::Graphics&) override;
+    void resized() override;
 
 private:
-    struct Leaf
-    {
-        float baseX = 0, y = 0, vy = 0, amp = 0, freq = 0, phase = 0, rot = 0, rotSpeed = 0, size = 0;
-        juce::Colour col;
-        juce::Rectangle<int> last;
-    };
+    void renderBackground();
+    void stepPreset (int delta);
 
-    void timerCallback() override;
-    juce::Point<float> posOf (const Leaf&) const;
-    float rotOf (const Leaf&) const;
-    juce::Rectangle<int> boundsOf (const Leaf&) const;
+    EmoBoardProcessor& proc;
+    juce::Image background;
+    std::vector<std::unique_ptr<Pedal>> pedals;
 
-    std::vector<Leaf> leaves;
-    float time = 0.0f;
-    juce::Random rng { 99 };
+    juce::Slider inKnob, outKnob;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inAtt, outAtt;
+    LevelMeter meter;
+
+    juce::ComboBox presetBox;
+    juce::TextButton prevBtn { "<" }, nextBtn { ">" };
 };
 
 //==============================================================================
@@ -117,20 +123,9 @@ class EmoBoardEditor : public juce::AudioProcessorEditor
 public:
     explicit EmoBoardEditor (EmoBoardProcessor&);
     ~EmoBoardEditor() override;
-
-    void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    void renderBackground();
-
     EmoLookAndFeel laf;
-    juce::Image background;
-
-    std::vector<std::unique_ptr<Pedal>> pedals;
-
-    juce::Slider inKnob, outKnob;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inAtt, outAtt;
-    LevelMeter meter;
-    FallingLeaves leaves;
+    Board board;
 };

@@ -411,6 +411,101 @@ void EmoBoardProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     outPeak.store (peak);
 }
 
+
+namespace
+{
+    struct Preset { const char* name; std::vector<std::pair<const char*, float>> v; };
+
+    const std::vector<Preset>& presets()
+    {
+        static const std::vector<Preset> p = {
+            { "Init - Clean Twinkle", {} },
+
+            { "American Football style", {
+                { "comp_on", 1 }, { "comp_amt", 0.3f }, { "drv_on", 0 },
+                { "cho_on", 1 }, { "cho_rate", 0.5f }, { "cho_depth", 0.4f }, { "cho_mix", 0.3f },
+                { "dly_on", 1 }, { "dly_time", 330 }, { "dly_fb", 0.3f }, { "dly_mix", 0.2f },
+                { "rev_on", 1 }, { "rev_size", 0.55f }, { "rev_mix", 0.28f },
+                { "tape_on", 1 }, { "tape_warm", 0.3f } } },
+
+            { "Cap'n Jazz style", {
+                { "comp_amt", 0.25f }, { "drv_on", 1 }, { "drv_mode", 0 }, { "drv_gain", 0.5f }, { "drv_tone", 0.7f }, { "drv_level", 0.65f },
+                { "cho_on", 0 }, { "dly_time", 180 }, { "dly_fb", 0.2f }, { "dly_mix", 0.12f },
+                { "rev_size", 0.25f }, { "rev_mix", 0.15f }, { "tape_wow", 0.1f } } },
+
+            { "Mineral style", {
+                { "comp_amt", 0.45f }, { "drv_gain", 0.45f }, { "drv_tone", 0.4f }, { "drv_level", 0.65f },
+                { "cho_mix", 0.2f }, { "dly_time", 420 }, { "dly_fb", 0.45f }, { "dly_mix", 0.3f },
+                { "rev_size", 0.8f }, { "rev_damp", 0.6f }, { "rev_pre", 40 }, { "rev_mix", 0.4f } } },
+
+            { "Sunny Day Real Estate style", {
+                { "comp_amt", 0.5f }, { "drv_gain", 0.6f }, { "drv_tone", 0.55f }, { "drv_level", 0.7f },
+                { "cho_mix", 0.25f }, { "dly_time", 450 }, { "dly_fb", 0.4f }, { "dly_mix", 0.25f },
+                { "rev_size", 0.7f }, { "rev_mix", 0.35f } } },
+
+            { "The Promise Ring style", {
+                { "drv_gain", 0.3f }, { "drv_tone", 0.8f }, { "cho_rate", 0.8f }, { "cho_mix", 0.3f },
+                { "dly_time", 250 }, { "dly_fb", 0.25f }, { "dly_mix", 0.15f },
+                { "rev_size", 0.4f }, { "rev_mix", 0.2f }, { "tape_wow", 0.1f }, { "tape_dark", 0.1f } } },
+
+            { "Algernon Cadwallader style", {
+                { "comp_amt", 0.35f }, { "drv_gain", 0.55f }, { "drv_tone", 0.75f }, { "drv_level", 0.7f },
+                { "cho_on", 0 }, { "dly_time", 200 }, { "dly_fb", 0.2f }, { "dly_mix", 0.1f },
+                { "rev_size", 0.3f }, { "rev_mix", 0.15f }, { "tape_on", 0 } } },
+
+            { "Snowing style", {
+                { "drv_gain", 0.55f }, { "drv_tone", 0.6f }, { "drv_level", 0.65f },
+                { "cho_mix", 0.15f }, { "dly_time", 320 }, { "dly_fb", 0.3f }, { "dly_mix", 0.2f },
+                { "rev_size", 0.5f }, { "rev_mix", 0.25f } } },
+
+            { "Foxing style - Ethereal", {
+                { "drv_gain", 0.2f }, { "cho_depth", 0.7f }, { "cho_mix", 0.5f },
+                { "dly_time", 500 }, { "dly_fb", 0.55f }, { "dly_mix", 0.35f },
+                { "rev_size", 0.85f }, { "rev_pre", 50 }, { "rev_mix", 0.45f } } },
+
+            { "Tiny Moving Parts style", {
+                { "gate_on", 1 }, { "gate_thr", -55 }, { "comp_amt", 0.3f },
+                { "drv_gain", 0.5f }, { "drv_tone", 0.85f }, { "drv_level", 0.7f },
+                { "cho_on", 0 }, { "dly_mix", 0.1f }, { "rev_size", 0.3f }, { "rev_mix", 0.2f }, { "tape_on", 0 } } },
+
+            { "Sour Fuzz", {
+                { "gate_on", 1 }, { "drv_mode", 1 }, { "drv_gain", 0.45f }, { "drv_tone", 0.45f }, { "drv_level", 0.5f },
+                { "cho_on", 0 }, { "dly_mix", 0.15f }, { "rev_mix", 0.25f }, { "tape_dark", 0.4f } } },
+
+            { "Sad Autumn Ambient", {
+                { "drv_on", 0 }, { "trm_on", 1 }, { "trm_rate", 3.0f }, { "trm_depth", 0.4f },
+                { "cho_depth", 0.8f }, { "cho_mix", 0.5f },
+                { "dly_time", 600 }, { "dly_fb", 0.6f }, { "dly_mix", 0.4f }, { "dly_wob", 0.4f },
+                { "rev_size", 0.95f }, { "rev_damp", 0.7f }, { "rev_pre", 60 }, { "rev_mix", 0.6f },
+                { "tape_wow", 0.4f }, { "tape_dark", 0.5f } } }
+        };
+        return p;
+    }
+}
+
+int EmoBoardProcessor::getNumPrograms() { return (int) presets().size(); }
+
+const juce::String EmoBoardProcessor::getProgramName (int i)
+{
+    const auto& ps = presets();
+    return (i >= 0 && i < (int) ps.size()) ? juce::String (ps[(size_t) i].name) : juce::String();
+}
+
+void EmoBoardProcessor::setCurrentProgram (int i)
+{
+    const auto& ps = presets();
+    if (i < 0 || i >= (int) ps.size()) return;
+    currentPreset = i;
+
+    for (auto* prm : getParameters())
+        if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (prm))
+            r->setValueNotifyingHost (r->getDefaultValue());
+
+    for (auto& kv : ps[(size_t) i].v)
+        if (auto* r = apvts.getParameter (kv.first))
+            r->setValueNotifyingHost (r->convertTo0to1 (kv.second));
+}
+
 juce::AudioProcessorEditor* EmoBoardProcessor::createEditor()
 {
     return new EmoBoardEditor (*this);
